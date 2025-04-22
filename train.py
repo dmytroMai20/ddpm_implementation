@@ -10,8 +10,10 @@ from dataset import get_loader
 import matplotlib.pyplot as plt
 from einops import rearrange
 import time
-from util import compute_kid, load_real_images, save_metrics, save_model
+from util import compute_kid, load_real_images, save_metrics, save_model, compute_fid
+import torchvision.utils as vutils
 
+timesteps=300
 
 if __name__=="__main__":
     timesteps = 300
@@ -30,7 +32,7 @@ if __name__=="__main__":
     img_res = 64
     batch_size=32
     channels=3
-    dataset_name = "STL10"
+    dataset_name = "CelebA"
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
 def train():
@@ -77,6 +79,9 @@ def train():
     true_images = load_real_images(data_loader,device, kid_samples)
     kid_means = []
     kid_stds = []
+    fid_scores = []
+    best_fid = 10000
+    best_kid = 10
     for epoch in range(epochs):
         start_time = time.time()
         model.train()
@@ -112,9 +117,13 @@ def train():
                 generated_images.append(gen_images)
             generated_images = torch.cat(generated_images, dim=0)
             kid_mean, kid_std = compute_kid(true_images,generated_images, device, res = img_res, batch_size=batch_size, sample_size=500)
+            fid_score = compute_fid(true_images, generated_images,device)
             kid_means.append(kid_mean)
             kid_stds.append(kid_std)
+            fid_scores.append(fid_score)
+        del generated_images
         torch.cuda.empty_cache()
+        print(f"Epoch {epoch+1}/{epochs}: KID - {kid_mean}, FID - {fid_score}")
 
     time_per_kimg = ((sum(times_per_epoch)/len(times_per_epoch))/(len(data_loader)*batch_size))*1000
     cum_times = np.cumsum(np.array(times_per_epoch))
@@ -151,6 +160,28 @@ def train():
     plt.legend()
     plt.title("Training KID curve")
     plt.savefig(f"kid_plot_ddpm_{dataset_name}_{str(img_res)}_{str(timesteps)}.png")
+    plt.show()
+
+    fig, ax1 = plt.subplots()   # may need to fix figure size to (10,5) too
+
+    # FID line (left y-axis)
+    color = 'tab:blue'
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('FID', color=color)
+    ax1.plot(cum_times, fid_scores, color=color, label='FID')
+    ax1.tick_params(axis='y', labelcolor=color)
+
+    # KID line with error bars (right y-axis)
+    ax2 = ax1.twinx()
+    color = 'tab:red'
+    ax2.set_ylabel('KID', color=color)
+    ax2.errorbar(cum_times, kid_means, yerr=kid_stds, color=color, linestyle='--', marker='o', label='KID ± std')
+    ax2.tick_params(axis='y', labelcolor=color)
+
+    # Layout and title
+    fig.tight_layout()
+    plt.title("FID and KID over Training Time")
+    plt.savefig(f"fid_vs_kid_ddpm_plot_{dataset_name}_{str(img_res)}.png")
     plt.show()
     """if step != 0 and step % save_and_sample_every == 0:
                 milestone = step // save_and_sample_every
@@ -214,6 +245,8 @@ def p_sample(model, x, t, t_index):
         # Algorithm 2 line 4:
         return model_mean + torch.sqrt(posterior_variance_t) * noise 
 
+
+
 # Algorithm 2 (including returning all images)
 @torch.no_grad()
 def p_sample_loop(model, shape):
@@ -230,8 +263,31 @@ def p_sample_loop(model, shape):
     return img.detach() 
 
 @torch.no_grad()
-def sample(model, image_size, batch_size=16, channels=3):
+def sample(model, image_size, batch_size=32, channels=3):
     return p_sample_loop(model, shape=(batch_size, channels, image_size, image_size))
+
+def load_model(path, dataset, res, device):
+    checkpoint = torch.load(f"{path}/ddpm_{dataset}_{str(res)}_{str(300)}.pt", map_location=device)
+    model = Unet(
+        dim=res,
+        channels=3,
+        dim_mults=(1, 2, 4,)
+    )
+    model.load_state_dict(checkpoint['model'])
+    return model
+
+def eval_model():
+    res = 64
+    batch_size= 32
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = load_model("data","CelebA", res, device)
+    imgs = sample(model, res, batch_size)
+    imgs = (imgs + 1) / 2
+    grid = vutils.make_grid(imgs, nrow=8)
+    plt.figure(figsize=(8,8))
+    plt.axis("off")
+    plt.imshow(grid.permute(1, 2, 0).cpu().numpy())
+    plt.show()  
 
 if __name__=="__main__":
     train()

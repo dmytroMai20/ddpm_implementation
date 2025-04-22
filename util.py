@@ -31,7 +31,22 @@ def compute_kid(real_imgs, fake_imgs, device, res=64, batch_size=32, sample_size
     #torch.cuda.empty_cache
     kid_values = kid.compute()
     kid.reset()
+    del kid
     return [kid_values[0].item(), kid_values[1].item()]
+
+@torch.no_grad()
+def compute_fid(real_imgs, fake_imgs, device, sample_size=500): # smaller sample size for kid
+    #real_imgs.to(device) # should already be on device and transformed from load_real_images
+    #real_imgs = transform(real_imgs)
+    fake_imgs = transform(fake_imgs)
+    fid = FrechetInceptionDistance(feature=2048,subset_size=50, normalize=True).to(device)
+    fid.update(real_imgs[:sample_size], real=True)
+    fid.update(fake_imgs[:sample_size], real=False)
+    #del fake_imgs
+    #torch.cuda.empty_cache
+    fid_value = fid.compute().item()
+    del fid
+    return fid_value
 
 def save_metrics(path, times, kids_mean, kids_stds, gpu_alloc, gpu_reserved, time_kimg, batch_size, dataset, res, max_t):
     save_path = f"{path}/ddpm_{dataset}_{str(res)}_{str(max_t)}_metrics.pth"
