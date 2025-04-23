@@ -10,8 +10,9 @@ from dataset import get_loader
 import matplotlib.pyplot as plt
 from einops import rearrange
 import time
-from util import compute_kid, load_real_images, save_metrics, save_model, compute_fid
+from util import compute_kid, load_real_images, save_metrics, save_model, compute_fid, save_generated_images
 import torchvision.utils as vutils
+
 
 timesteps=300
 
@@ -82,6 +83,8 @@ def train():
     fid_scores = []
     best_fid = 10000
     best_kid = 10
+    best_fid_model = model.state_dict()
+    best_kid_model = model.state_dict()
     for epoch in range(epochs):
         start_time = time.time()
         model.train()
@@ -121,9 +124,16 @@ def train():
             kid_means.append(kid_mean)
             kid_stds.append(kid_std)
             fid_scores.append(fid_score)
+            save_generated_images(generated_images,epoch, dataset_name, img_res, timesteps)
         del generated_images
         torch.cuda.empty_cache()
         print(f"Epoch {epoch+1}/{epochs}: KID - {kid_mean}, FID - {fid_score}")
+        if fid_score < best_fid:
+            best_fid = fid_score
+            best_fid_model = model.state_dict()
+        if kid_mean < best_kid:
+            best_kid = kid_mean
+            best_kid_model = model.state_dict()
 
     time_per_kimg = ((sum(times_per_epoch)/len(times_per_epoch))/(len(data_loader)*batch_size))*1000
     cum_times = np.cumsum(np.array(times_per_epoch))
@@ -139,6 +149,16 @@ def train():
     plt.ylabel("Loss")
     plt.legend()
     plt.title("Training Loss Curve")
+    plt.savefig(f"loss_plot_ddpm_{dataset_name}_{str(img_res)}.png")
+    plt.show()
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(losses, label="Loss")
+    plt.xlabel("Iteration")
+    plt.yscale("log")
+    plt.ylabel("Loss (log scale)")
+    plt.legend()
+    plt.title("Training Loss (log) Curve")
     plt.savefig(f"loss_plot_ddpm_{dataset_name}_{str(img_res)}.png")
     plt.show()
 
@@ -166,7 +186,7 @@ def train():
 
     # FID line (left y-axis)
     color = 'tab:blue'
-    ax1.set_xlabel('Epoch')
+    ax1.set_xlabel('Time (Seconds)')
     ax1.set_ylabel('FID', color=color)
     ax1.plot(cum_times, fid_scores, color=color, label='FID')
     ax1.tick_params(axis='y', labelcolor=color)
@@ -191,7 +211,7 @@ def train():
                 all_images = (all_images + 1) * 0.5
                 save_image(all_images, str(results_folder / f'sample-{milestone}.png'), nrow = 6)"""
     save_metrics("data",cum_times, kid_means, kid_stds, gpu_mb_alloc, gpu_mb_reserved, time_per_kimg, batch_size, dataset_name, img_res, timesteps)
-    save_model("data", model, dataset_name, img_res, timesteps)
+    save_model("data", model,best_fid_model,best_kid_model, dataset_name, img_res, timesteps)
 def extract(a, t, x_shape):
     batch_size = t.shape[0]
     out = a.gather(-1, t.cpu())

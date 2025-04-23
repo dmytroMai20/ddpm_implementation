@@ -3,6 +3,8 @@ import torchvision.transforms as T
 from torchmetrics.image.fid import FrechetInceptionDistance
 from torchmetrics.image.kid import KernelInceptionDistance
 import math
+import os
+from torchvision.utils import save_image
 
 transform = T.Compose([
     T.Resize((299, 299)),  # InceptionV3 expects 299x299
@@ -39,7 +41,7 @@ def compute_fid(real_imgs, fake_imgs, device, sample_size=500): # smaller sample
     #real_imgs.to(device) # should already be on device and transformed from load_real_images
     #real_imgs = transform(real_imgs)
     fake_imgs = transform(fake_imgs)
-    fid = FrechetInceptionDistance(feature=2048,subset_size=50, normalize=True).to(device)
+    fid = FrechetInceptionDistance(feature=2048, normalize=True).to(device)
     fid.update(real_imgs[:sample_size], real=True)
     fid.update(fake_imgs[:sample_size], real=False)
     #del fake_imgs
@@ -58,7 +60,28 @@ def save_metrics(path, times, kids_mean, kids_stds, gpu_alloc, gpu_reserved, tim
                 'time_kimg':time_kimg,
                 'batch_size':batch_size}, save_path)
     
-def save_model(path, model, dataset,res, t_max):
+def save_model(path, model,best_fid_model, best_kid_model,  dataset,res, t_max):
     save_path = f"{path}/ddpm_{dataset}_{str(res)}_{str(t_max)}.pt"
-    torch.save({'model':model.state_dict()
+    torch.save({'model':model.state_dict(),
+                'best_kid_model':best_kid_model,
+                'best_fid_model':best_fid_model
                  }, save_path)
+    
+def save_epoch_results(path, epoch,generated_images,dataset,res,t_max):
+    save_path = f"{path}/ddpm_{dataset}_{str(res)}_{str(t_max)}.pt"
+    pass
+
+def save_generated_images(images, epoch,dataset,res,t_max, folder='data'):
+
+    if images.min() < 0:
+        images = (images + 1) / 2  # Assuming input is in [-1, 1]
+
+    # Create directory for this epoch
+    epoch_dir = os.path.join(folder,f'ddpm_{dataset}_{str(res)}_{str(t_max)}', f'epoch_{str(epoch)}')
+    os.makedirs(epoch_dir, exist_ok=True)
+
+    # Save each image
+    for i in range(images.size(0)):
+        save_path = os.path.join(epoch_dir, f'image_{i:04d}.png')
+        save_image(images[i], save_path)
+    print(f"Epoch images saved to {epoch_dir}")
