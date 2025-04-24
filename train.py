@@ -97,8 +97,8 @@ def train():
 
             loss = p_losses(model, imgs, t)
 
-            if batch_idx % 100 == 0:
-                print("Loss:", loss.item())
+            #if batch_idx % 100 == 0:
+            #    print("Loss:", loss.item())
 
             loss.backward()
             optimizer.step()
@@ -210,7 +210,7 @@ def train():
                 all_images = torch.cat(all_images_list, dim=0)
                 all_images = (all_images + 1) * 0.5
                 save_image(all_images, str(results_folder / f'sample-{milestone}.png'), nrow = 6)"""
-    save_metrics("data",cum_times, kid_means, kid_stds, gpu_mb_alloc, gpu_mb_reserved, time_per_kimg, batch_size, dataset_name, img_res, timesteps)
+    save_metrics("data",cum_times, kid_means, kid_stds, gpu_mb_alloc, gpu_mb_reserved, time_per_kimg,losses, batch_size, dataset_name, img_res, timesteps)
     save_model("data", model,best_fid_model,best_kid_model, dataset_name, img_res, timesteps)
 def extract(a, t, x_shape):
     batch_size = t.shape[0]

@@ -50,7 +50,7 @@ def compute_fid(real_imgs, fake_imgs, device, sample_size=500): # smaller sample
     del fid
     return fid_value
 
-def save_metrics(path, times, kids_mean, kids_stds, gpu_alloc, gpu_reserved, time_kimg, batch_size, dataset, res, max_t):
+def save_metrics(path, times, kids_mean, kids_stds, gpu_alloc, gpu_reserved, time_kimg,losses, batch_size, dataset, res, max_t):
     save_path = f"{path}/ddpm_{dataset}_{str(res)}_{str(max_t)}_metrics.pth"
     torch.save({'times':times,
                 'kids_mean':kids_mean,
@@ -58,7 +58,8 @@ def save_metrics(path, times, kids_mean, kids_stds, gpu_alloc, gpu_reserved, tim
                 'gpu_alloc':gpu_alloc,  #gpu alloc and reserved in mb
                 'gpu_reserved':gpu_reserved,
                 'time_kimg':time_kimg,
-                'batch_size':batch_size}, save_path)
+                'batch_size':batch_size,
+                'loss':losses}, save_path)
     
 def save_model(path, model,best_fid_model, best_kid_model,  dataset,res, t_max):
     save_path = f"{path}/ddpm_{dataset}_{str(res)}_{str(t_max)}.pt"
@@ -67,12 +68,7 @@ def save_model(path, model,best_fid_model, best_kid_model,  dataset,res, t_max):
                 'best_fid_model':best_fid_model
                  }, save_path)
     
-def save_epoch_results(path, epoch,generated_images,dataset,res,t_max):
-    save_path = f"{path}/ddpm_{dataset}_{str(res)}_{str(t_max)}.pt"
-    pass
-
 def save_generated_images(images, epoch,dataset,res,t_max, folder='data'):
-
     if images.min() < 0:
         images = (images + 1) / 2  # Assuming input is in [-1, 1]
 
