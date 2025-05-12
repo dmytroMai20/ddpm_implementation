@@ -49,8 +49,7 @@ def get_loader(batch_s,res, data="FashionMNIST"):
         # Download and load the dataset
         dataset = STL10(root="./data", split="unlabeled", download=True, transform=transform)
         # Create a DataLoader
-        subset = Subset(dataset, range(600))
-        dataloader = DataLoader(subset, batch_size=batch_s, drop_last=True, shuffle=True, num_workers=0, pin_memory=True)
+        dataloader = DataLoader(dataset, batch_size=batch_s, drop_last=True, shuffle=True, num_workers=0, pin_memory=True)
         return dataloader
     elif data == "Church":
         transform = transforms.Compose([
