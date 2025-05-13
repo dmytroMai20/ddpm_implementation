@@ -12,6 +12,7 @@ from einops import rearrange
 import time
 from util import compute_kid, load_real_images, save_metrics, save_model, compute_fid, save_generated_images
 import torchvision.utils as vutils
+from torchvision.utils import make_grid
 
 
 timesteps=300
@@ -269,12 +270,15 @@ def p_sample(model, x, t, t_index):
 
 # Algorithm 2 (including returning all images)
 @torch.no_grad()
-def p_sample_loop(model, shape):
+def p_sample_loop(model, shape, z=None):
     device = next(model.parameters()).device
 
     b = shape[0]
     # start from pure noise (for each example in the batch)
-    img = torch.randn(shape, device=device)
+    if z == None:
+        img = torch.randn(shape, device=device)
+    else:
+        img = z
     #imgs = []
 
     for i in tqdm(reversed(range(0, timesteps)), desc='sampling loop time step', total=timesteps):
@@ -282,9 +286,10 @@ def p_sample_loop(model, shape):
         #imgs.append(img.cpu().numpy())
     return img.detach() 
 
+
 @torch.no_grad()
-def sample(model, image_size, batch_size=32, channels=3):
-    return p_sample_loop(model, shape=(batch_size, channels, image_size, image_size))
+def sample(model, image_size, batch_size=32, channels=3, z = None):
+    return p_sample_loop(model, shape=(batch_size, channels, image_size, image_size), z=z)
 
 def load_model(path, dataset, res, device):
     checkpoint = torch.load(f"{path}/ddpm_{dataset}_{str(res)}_{str(300)}.pt", map_location=device)
@@ -309,5 +314,36 @@ def eval_model():
     plt.imshow(grid.permute(1, 2, 0).cpu().numpy())
     plt.show()  
 
+def eval_and_interpolate():
+    res = 64
+    batch_size= 1
+    dataset_name = "CelebA"
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = load_model("data","CelebA", res, device)
+    interpolate_latent_space(model, res, dataset_name)
+def interpolate_latent_space(model,res, device, num_steps=7):
+    batch_size = 1
+    shape = (batch_size, 3, res, res)
+    # 1) Grab two full per-block w's via your existing helper:
+    z1 = torch.randn(shape, device=device)
+    z2 = torch.randn(shape, device=device)
+
+    # 2) Generate one fixed noise list once
+
+    # 3) Linearly interpolate per-layer:
+    images = []
+    for lambd in torch.linspace(0, 1, num_steps, device=device):
+        # w1, w2 are both shape: (num_blocks, batch_size, w_dims)
+        z_lambd = (1 - lambd) * z1 + lambd * z2
+        img = sample(model, res,batch_size,z=z_lambd)   # exactly the same call as gen_images()
+        images.append(img[0].cpu())
+
+    # 4) Visualize
+    grid = make_grid(images, nrow=num_steps, normalize=True, scale_each=True)
+    plt.figure(figsize=(num_steps * 2, 2))
+    plt.axis("off")
+    plt.imshow(grid.permute(1, 2, 0).numpy())
+    plt.show()
 if __name__=="__main__":
-    train()
+    eval_and_interpolate()
+    #train()
