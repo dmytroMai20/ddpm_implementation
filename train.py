@@ -13,6 +13,10 @@ import time
 from util import compute_kid, load_real_images, save_metrics, save_model, compute_fid, save_generated_images
 import torchvision.utils as vutils
 from torchvision.utils import make_grid
+import math 
+import os
+from torchvision.utils import save_image
+from torch_fidelity import calculate_metrics
 
 
 timesteps=300
@@ -319,8 +323,67 @@ def eval_and_interpolate():
     batch_size= 1
     dataset_name = "CelebA"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = load_model("data","CelebA", res, device)
-    interpolate_latent_space(model, res, dataset_name)
+    model = load_model("data", res, device)
+    interpolate_latent_space(model, res, device)
+
+@torch.no_grad()
+def save_real_images(real_dataloader, to_save = 5000):
+    os.makedirs("real", exist_ok=True)
+    imgs_saved = 0
+    for batch in tqdm(real_dataloader, desc= "Saving real images"):
+        if imgs_saved >= to_save: 
+            break
+        imgs, _ = batch
+        for img in imgs:
+            if imgs_saved >= to_save:
+                break
+            path = os.path.join("real", f"img_{imgs_saved}.png")
+            save_image(img, path, normalize=True)
+            imgs_saved+=1
+    print("Real images saved.")
+
+def eval_prc():
+    dataset_name = "CelebA"
+    generated_images = []
+    to_test = 500
+    batch_size=128
+    res = 64
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = load_model("data",dataset_name, res, device)
+
+    real_loader = get_loader(batch_size,res,dataset_name)
+    save_real_images(real_loader, to_save=to_test)
+    del real_loader
+
+    for i in range(0, to_test, batch_size):
+        imgs = sample(model,res,batch_size)
+        generated_images.append(imgs)
+        del imgs
+    generated_images = torch.cat(generated_images, dim=0)
+    save_generated_images(generated_images,"evaluation","CelebA",res)
+    del generated_images
+
+    prc_dict = calculate_metrics(
+        input1=f'./real', 
+        input2=f'./data/ddpm_{dataset_name}_{str(res)}/epoch_evaluation', 
+        cuda=True, 
+        isc=False, 
+        fid=True, 
+        kid=True, 
+        prc=True, 
+        verbose=False
+    ) 
+    inception_dict = calculate_metrics(
+        input1=f'./data/ddpm_{dataset_name}_{str(res)}/epoch_evaluation', 
+        cuda=True, 
+        isc=True, 
+        fid=False, 
+        kid=False, 
+        prc=False, 
+        verbose=False
+    )
+    prc_dict['inception_score_mean'] = inception_dict['inception_score_mean']
+    print(prc_dict)
 def interpolate_latent_space(model,res, device, num_steps=7):
     batch_size = 1
     shape = (batch_size, 3, res, res)
@@ -345,5 +408,6 @@ def interpolate_latent_space(model,res, device, num_steps=7):
     plt.imshow(grid.permute(1, 2, 0).numpy())
     plt.show()
 if __name__=="__main__":
-    eval_and_interpolate()
+    #eval_and_interpolate()
+    eval_prc()
     #train()
